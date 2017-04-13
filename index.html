@@ -1,0 +1,661 @@
+<title>@DKdoes LD34</title>
+<style type="text/css">
+    body{margin:0;padding:0;overflow:hidden;}
+</style>
+<body>
+<script src="pixi.min.js"></script>
+<script src="cocoon.min.js"></script>
+<script src="tinycolor-min.js"></script>
+<script src="howler.min.js"></script>
+<script>
+
+PIXI.loader
+            .add('desyrel', 'quick4.xml')
+            .load(initiate);
+
+        
+    
+    function initiate(){
+        renderer = PIXI.autoDetectRenderer(
+            window.innerWidth,
+            window.innerHeight,
+        {
+            backgroundColor:0xDDDDFF
+        });
+        renderer.view.style.width="100%";
+        renderer.view.style.height="100%";
+        document.body.appendChild(renderer.view);
+        
+        
+        // r() generates a random number between 0 and 1
+        r = Math.random;
+        
+        
+        sin = Math.sin;
+        cos = Math.cos;
+        
+        // damage is basically difficulty level
+        damage = 1;
+        
+        
+        bonusSound = new Howl({urls: ['bonus.mp3'],volume:0.15});
+        levelupSound = new Howl({urls: ['levelup.mp3'],volume:0.5});
+        spawnSound = new Howl({urls: ['spawn.mp3'],volume:0.25});
+        hitSound = new Howl({urls: ['hit.mp3'],volume:0.08});
+        moveSound = new Howl({urls: ['move.mp3'],volume:0.05});
+        transformSound = new Howl({urls: ['transform.mp3'],volume:0.05});
+        
+        // value of the white dots, doesn't actually change
+        bonus = 5;
+        
+        // whenever you see two values, the first value (without the 2) is the target value
+        // the value with the 2 is the current value. I use this for lerping
+        
+        // position and size
+        glX = 500;
+        glY = 500;
+        glX2 = 500;
+        glY2 = 500;
+        glS = 0.1;
+        glS2 = 0.1;
+        
+        // background color and color of player
+        bgR = 221;
+        bgG = 221;
+        bgB = 255;
+        bgR2 = 221;
+        bgG2 = 221;
+        bgB2 = 255;
+        rc = 255;
+        gc = 145;
+        bc = 145;
+        rc2 = 255;
+        gc2 = 145;
+        bc2 = 145;
+        
+        
+        // player color. 0 is red, 1 is blue, 2 is yellow
+        color = 0;
+        // how fast to lerp between colors
+        colorSpeed = 0.09;
+        
+        
+        score = 0;
+        maxScore = 0;
+        
+        
+        // stage has most objects, particles has particles
+        // superstage exists to put the particles on top of the other objects 
+        superstage = new PIXI.Container();
+        stage = new PIXI.Container();
+        particles = new PIXI.ParticleContainer(3000);
+        superstage.addChild(stage);
+        superstage.addChild(particles);
+        
+        
+        scoreText = new PIXI.extras.BitmapText('Score: 0\nMax: 0',{font:'70px Quicksand',align:"center"});
+        scoreText.position.x=window.innerWidth-scoreText.width-20;
+        scoreText.position.y=0;
+        scoreText.tint=0xababef;
+        stage.addChild(scoreText);
+        
+        
+        // this creates all the sprites for the objects and particles
+        
+        // the player
+        texture = new PIXI.RenderTexture(renderer, 1000, 1000);
+        gr = new PIXI.Graphics();
+        gr.beginFill(0xFFFFFF);
+        gr.drawCircle(500, 500, 500);
+        gr.endFill();
+        texture.render(gr);
+        
+        // the line that spins around the player
+        texture2 = new PIXI.RenderTexture(renderer,200,4);
+        gr.clear();
+        gr.beginFill(0xffffff);
+        gr.drawRect(0,0,200,4);
+        gr.endFill();
+        texture2.render(gr);
+        
+        
+        
+        // after the player and the line texture are created, then the sprites are created
+        // line first so that it is drawn underneat the player
+        line = new PIXI.Sprite(texture2);
+        line.anchor.set(1,0.5);
+        line.alpha=0.50;
+        line.tint=0x777777;
+        stage.addChild(line);
+        line.position.set(glX,glY);
+        
+        s = new PIXI.Sprite(texture);
+        s.anchor.set(0.5,0.5);
+        s.x=500;
+        s.y=500;
+        stage.addChild(s);
+        
+        
+        // the particles
+        partArray = [];
+        numOfParts = 120;
+        particleTexture = new PIXI.RenderTexture(renderer,6*120,6);
+        gr.clear();
+        for (i=0;i<120;i++){
+            gr.beginFill('0x'+tinycolor({h:i*3,s:"70%",v:"95%"}).toHex());
+            gr.drawCircle(i*6+3,3,3);
+            gr.endFill();
+        }
+        particleTexture.render(gr);
+        for (i=0;i<120;i++){
+            partArray.push(
+                new PIXI.Texture(particleTexture.baseTexture,
+                                 new PIXI.math.Rectangle(i*6,0,6,6)
+                                )
+            )
+        }
+        
+        
+
+        // the white dots and the enemies
+        texture3 = new PIXI.RenderTexture(renderer, 100, 100);
+        gr.clear();
+        gr.beginFill(0xFFFFFF);
+        gr.drawCircle(50, 50, 50);
+        gr.endFill();
+        texture3.render(gr);
+        
+        
+        
+        
+        
+        
+        // uncomment this section to turn controls text back on, but you need to uncomment the stuff
+        // in the animate() function down there, too
+        
+        controlsText = new PIXI.Text('DESKTOP:\npress F and J\n(or arrows)\n\nMOBILE:\ntap the left and right\nsides of the screen',{font:'70px Arial',fill:0xababef,align:'center'});
+        controlsText.x=window.innerWidth/2-controlsText.width/2;
+        controlsText.flag = 0;
+        stage.addChild(controlsText);
+        
+
+        
+        animate();
+    }
+    
+
+    
+    function resize(event){
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        renderer.view.style.width = w + "px";
+        renderer.view.style.height = h + "px";
+        renderer.resize(w,h);
+        renderer.view.style.width="100%";
+        renderer.view.style.height="100%";
+        scoreText.position.x=window.innerWidth-scoreText.width-20;
+    }
+    window.addEventListener('resize',resize);
+    
+    
+
+
+
+    function keyboard(keyCode){
+        var key = {};
+        key.code = keyCode;
+        key.isDown = false;
+        key.isUp = true;
+        key.press = undefined;
+        key.release = undefined;
+        key.downHandler = function(event){
+            if (event.keyCode === key.code){
+                if (key.isUp && key.press) key.press();
+                key.isDown = true;
+                key.isUp = false;
+            }
+            event.preventDefault();
+        };  
+        key.upHandler = function(event){
+            if (event.keyCode === key.code) {
+                if (key.isDown && key.release) key.release();
+                key.isDown = false;
+                key.isUp = true;
+            }
+            event.preventDefault();
+        };
+        window.addEventListener(
+        "keydown",key.downHandler.bind(key),false);
+        window.addEventListener(
+        "keyup",key.upHandler.bind(key),false);
+        return key;
+    }
+    
+
+    
+    buttonOne = function(){
+        moveSound.play();
+        moveBlast();
+        glX+=sin(-1*line.rotation-Math.PI/2)*200;
+        glY+=cos(-1*line.rotation-Math.PI/2)*200;
+    }
+    
+    buttonTwo = function(){
+        color++;
+        transformSound.play();
+        color%=3;
+        if (color==0){
+            transformBlast(0);
+            colorSpeed = 0.09;
+            rc = 255;
+            gc = 145;
+            bc = 145;}
+        else if (color==1){
+            transformBlast(1);
+            colorSpeed = 0.13;
+            rc = 145;
+            gc = 200;
+            bc = 255;
+            }
+        else{
+            transformBlast(2);
+            colorSpeed = 0.09;
+            rc = 255;
+            gc = 255;
+            bc = 145;
+        }
+    }
+    window.addEventListener('touchstart',function(event){
+        if (event.touches[0].pageX<window.innerWidth/2){
+            buttonOne();}
+        else{buttonTwo();}});
+    
+    
+    pointsUP = keyboard(49);
+    pointsDOWN = keyboard(50);
+    pointsUP.press = function(){score+=5;}
+    pointsDOWN.press = function(){score-=5;}
+    
+    abutton = keyboard(65);
+    dbutton = keyboard(68);
+    abutton.press = buttonOne;
+    dbutton.press = buttonTwo;
+    leftarrow = keyboard(37);
+    rightarrow = keyboard(39);
+    leftarrow.press = buttonOne;
+    rightarrow.press = buttonTwo;
+    one = keyboard(70);
+    two = keyboard(74);
+    one.press = buttonOne;
+    two.press = buttonTwo;
+    
+    
+    // white dots
+    pickups = [];
+    pickup = function(x,y){
+        this.s = new PIXI.Sprite(texture3);
+        this.s.scale.x = 0.5;
+        this.s.scale.y = 0.5;
+        this.s.alpha = 0.7;
+        this.s.anchor.set(0.5,0.5);
+        this.vx=0;
+        this.vy=0;
+        this.s.x = x;
+        this.s.y = y;
+        stage.addChild(this.s);
+        this.turn = function(){
+            if (this.s.x<0){this.s.x=0}
+            if (this.s.y<0){this.s.y=0}
+            if (this.s.x>window.innerWidth){this.s.x=window.innerWidth}
+            if (this.s.y>window.innerHeight){this.s.y=window.innerHeight}
+            var xx = glX2-this.s.x;
+            var yy = glY2-this.s.y;
+            var dir = Math.atan2(yy,xx);
+            var dis = Math.sqrt(Math.pow(xx,2)+Math.pow(yy,2));
+            if (dis<200){
+                this.vx += cos(dir)/dis;
+                this.vy += sin(dir)/dis;
+            } else if (dis > 0) {
+                this.vx-=0.01;
+                this.vy-=0.01;
+                if (this.vx < 0){this.vx=0;}
+                if (this.vy < 0){this.vy=0;}
+            }
+            this.s.x+=this.vx;
+            this.s.y+=this.vy;
+            if (dis < Math.pow(50,(135+(score%50))/135)){
+                score+=bonus;
+                if (score>maxScore){maxScore=score}       
+                stage.removeChild(this.s);
+                scoreText.text='Score: '+score.toString()+'\nMax: '+maxScore.toString();
+                scoreText.position.x=window.innerWidth-scoreText.width-20;    
+                bonusSound.play();
+                return true;}
+        }
+    }
+    
+    
+    // enemies
+    meteors = [];
+    meteor = function(ctype){
+        this.s = new PIXI.Sprite(texture3);
+        
+        this.s.scale.x = 0.5;
+        this.s.scale.y = 0.5;
+        this.s.alpha=0.9;
+        this.ctype=ctype;
+        this.s.x = sin(r()*Math.PI*2)*window.innerWidth+(window.innerWidth/2);
+        this.s.y = cos(r()*Math.PI*2)*window.innerHeight+(window.innerHeight/2)
+        if (this.s.x>0&&this.s.x<window.innerWidth&&
+            this.s.y>0&&this.s.y<window.innerHeight){
+            this.s.x=window.innerWidth/2;
+            this.s.y=window.innerHeight*2;}
+        this.speed = 7+r()*6;
+        if (this.ctype==-1){this.ctype = Math.floor(r()*3);}
+        if (this.ctype==0){this.s.tint=0xff9191;}
+        else if (this.ctype==1){
+            this.s.tint=0x91c8ff;
+            if (damage==2){this.s.tint=0x3399ff;}
+        }
+        else if (this.ctype==2){this.s.tint=0xFFFF91;}
+        else if (this.ctype==3){this.s.tint=0x222222;}
+        
+        this.s.anchor.set(0.5,0.5);
+        
+        stage.addChild(this.s);
+        if (r()>0.166*damage){
+            this.dir = Math.atan2(glY2-this.s.y,glX2-this.s.x);
+        }
+        else{
+            this.dir = Math.atan2(glY2-this.s.y+(r()*400-200),glX2-this.s.x+(r()*400-200));
+        }
+        this.vx = cos(this.dir);
+        this.vy = sin(this.dir);
+        this.turn = function(){
+            if ((this.s.x<window.innerWidth*-1
+                 || this.s.x>window.innerWidth*3)
+                 &&(this.s.y<window.innerHeight*-1
+                 ||this.s.y>window.innerHeight*3)){
+                stage.removeChild(this.s);
+                return true;
+            }
+            parts.push(new part(this.s.x,this.s.y,this.ctype,'move',this.dir));
+            this.s.x+=this.vx*this.speed;
+            this.s.y+=this.vy*this.speed;
+            if (Math.sqrt(Math.pow(glX2-this.s.x,2)+Math.pow(glY2-this.s.y,2)) < Math.pow(50,(135+(score%50))/135)){
+                if (this.ctype==color){
+                    score+=2;
+                    spawnSound.play();
+                    if (score>maxScore){maxScore=score;};
+                    this.vx*=-1;
+                    this.vy*=-1;
+                    this.speed*=2.5;
+                    scoreText.text='Score: '+score.toString()+'\nMax: '+maxScore.toString();
+                    scoreText.position.x=window.innerWidth-scoreText.width-20;
+                }
+                else{
+                    score-=damage;
+                    rc2=0;gc2=0;bc2=0;colorSpeed=0.13;
+                    hitSound.play();
+                    if (score<0){score=0}
+                    stage.removeChild(this.s);
+                    scoreText.text='Score: '+score.toString()+'\nMax: '+maxScore.toString();
+                    scoreText.position.x=window.innerWidth-scoreText.width-20;
+                    return true;
+                }
+            }
+        }
+    }
+        
+    
+    
+    // particles
+    parts = [];
+    part = function(x,y,color,ex,dir){
+        if (color=='red'||color==0){
+            this.s = new PIXI.Sprite(partArray[Math.floor(r()*30)+90]);
+        }
+        else if (color=='blue'||color==1){
+            this.s = new PIXI.Sprite(partArray[Math.floor(r()*30)+60]);
+        }
+        else if (color=='yellow'||color==2){
+            if (damage>2){
+                this.s = new PIXI.Sprite(partArray[Math.floor(r()*45)+15]);
+            }
+            else{
+                this.s = new PIXI.Sprite(partArray[Math.floor(r()*120)]);
+            }
+        }
+        else if (color=='rainbow'||color==3){
+            this.s = new PIXI.Sprite(partArray[Math.floor(r()*120)]);
+        }
+         
+        var tx = sin(r()*Math.PI*2);
+        var ty = cos(r()*Math.PI*2);
+        
+        this.s.x=x+tx*20;
+        this.s.y=y+ty*20;
+        
+        
+        if (ex=='explode'){
+            this.vx = tx*15+(r()*10-5);
+            this.vy = ty*15+(r()*10-5);
+            this.life = 60;
+        }
+        
+        if (ex=='hit'){
+            var tPI = r()*Math.PI - Math.PI/2;
+            this.vx = sin((-1*dir-Math.PI/2)+tPI)*(10+r()*10);
+            this.vy = cos((-1*dir-Math.PI/2)+tPI)*(10+r()*10);
+            this.life=20;
+        }
+        if (ex=='move'){
+            var tPI = r()*0.5 - 0.25;
+            this.vx = sin((-1*dir-Math.PI/2)+tPI)*(10+r()*10);
+            this.vy = cos((-1*dir-Math.PI/2)+tPI)*(10+r()*10);
+            this.life=20;
+        }
+        
+        //this.vx = (r()-0.5)*50;
+        //this.vy = (r()-0.5)*50;
+        particles.addChild(this.s);
+        this.turn = function(){
+            //requestAnimationFrame(turn);
+            this.s.x+=this.vx;
+            this.s.y+=this.vy;
+            this.life--;
+            if (this.life<=0){
+                particles.removeChild(this.s);
+                return true;
+            }
+        }
+    }
+    
+
+    
+    // pre-built particle effects
+    
+    bonusGet = function(x,y){
+        for (i=0;i<100;i++){
+            parts.push(new part(x,y,'rainbow','explode'));}}
+    
+    transformBlast = function(color){
+        for (i=0;i<50;i++){
+             parts.push(new part(glX2,glY2,color,'explode'));}}
+    
+    moveBlast = function(){
+        for (i=0;i<50;i++){
+            parts.push(new part(glX2,glY2,3,'hit',line.rotation+Math.PI));}}
+    
+
+    
+    function animate(){
+        requestAnimationFrame(animate);
+        // update particles, white dots, and enemies. If they return true, they are removed from the stack
+        for (i = parts.length-1; i >= 0; i--){
+             if (parts[i].turn()){parts.splice(i,1)}
+        }
+        for (i = pickups.length-1; i >= 0; i--){
+            if (pickups[i].turn()){pickups.splice(i,1)}
+        }
+        for (i = meteors.length-1; i >= 0; i--){
+            if (meteors[i].turn()){meteors.splice(i,1)}
+        }
+        
+        // create roughly one pickup ever 10 seconds
+        if (r()<0.0016666&&pickups.length<10){
+            pickups.push(new pickup(r()*window.innerWidth,r()*window.innerHeight))}
+        
+        // random chance of new enemy
+        if (r()<0.0016*(Math.floor(score/25)+3)){meteors.push(new meteor(-1))}
+        
+        // chance of unblockable enemy. They only start appearing after damage is 4+
+        if (r()<0.0008*(damage-3)){meteors.push(new meteor(3))}
+        
+        
+        
+        // spin the line around the player
+        line.x=glX2;
+        line.y=glY2;
+        line.rotation+=Math.PI/180*(Math.floor(score/10)+10)/10;
+        if (line.rotation > Math.PI*2){line.rotation-=Math.PI*2;}
+        
+        // keep player on the screen
+        if (glX<0){glX=0}
+        if (glY<0){glY=0}
+        if (glX>window.innerWidth){glX=window.innerWidth}
+        if (glY>window.innerHeight){glY=window.innerHeight}
+        
+        
+        // make the player size slowly oscillate
+        temp = (sin(new Date().getTime()/8*(Math.PI/180)))/80+glS2;
+        s.scale.set(temp,temp);
+        
+        // lerp and control player position and size
+        glX2+=(glX-glX2)*0.09;
+        glY2+=(glY-glY2)*0.09;
+        glS=(score%50)*0.005+0.1;
+        glS2+=(glS-glS2)*0.1;
+        s.x=glX2;
+        s.y=glY2;
+        
+        
+        // lerp background color
+        bgR2+=(bgR-bgR2)*0.04;
+        bgG2+=(bgG-bgG2)*0.04;
+        bgB2+=(bgB-bgB2)*0.04;
+        var tempColor = tinycolor({r:bgR2,g:bgG2,b:bgB2})
+        renderer.backgroundColor='0x'+tempColor.toHex();
+        
+        // lerp the player's color
+        rc2+=(rc-rc2)*colorSpeed;
+        gc2+=(gc-gc2)*colorSpeed;
+        bc2+=(bc-bc2)*colorSpeed;
+        s.tint="0x"+tinycolor({r:rc2,g:gc2,b:bc2}).toHex();
+        
+        
+        
+        // all these if else ifs are just the level/damage controllers
+        // obviously I should have done this differently but I was running short on time
+        if (score>=50 && damage==1){
+            levelupSound.play();
+            damage++;
+            bgR=196;
+            bgG=196;
+            bgB=255;
+            line.alpha=0.70;
+            line.tint=0x444444;
+        }
+        else if (score<35 && damage==2){
+            damage--;
+            bgR = 221;
+            bgG = 221;
+            bgB = 255;
+            line.alpha=0.50;
+            line.tint=0x777777;
+        }
+        else if (score>=100 && damage==2){
+            damage++;
+            levelupSound.play();
+            line.alpha=0.70;
+            line.tint=0xeeeeee;
+            bgR=154;
+            bgG=154;
+            bgB=230;
+        }
+        else if (score<85 && damage==3){
+            damage--;
+            line.alpha=0.70;
+            line.tint=0x444444;
+            bgR=196;
+            bgG=196;
+            bgB=255;
+        }
+        else if (score>=150 && damage==3){
+            levelupSound.play();
+            damage++;
+            bgR=117;
+            bgG=117;
+            bgB=205;
+        }
+        else if (score<120 && damage==4){
+            damage--;
+            bgR=154;
+            bgG=154;
+            bgB=230;
+        }
+        else if (score>=200 && damage==4){
+            levelupSound.play();
+            damage++;
+            bgR=88;
+            bgG=88;
+            bgB=154;
+        }
+        else if (score<180 && damage==5){
+            damage--;
+            bgR=117;
+            bgG=117;
+            bgB=205;
+        }
+        else if (score>=300 && damage==5){
+            levelupSound.play();
+            damage++;
+            bgR=44;
+            bgG=44;
+            bgB=78;
+        }
+        else if (score<250 && damage==6){
+            damage--;
+            bgR=88;
+            bgG=88;
+            bgB=154;
+        }
+        
+        
+        
+        if (score>=5&&controlsText.flag==0){
+            controlsText.flag = 1;
+        }
+        if (controlsText.flag == 1){
+            controlsText.alpha -= 0.005;
+            if (controlsText.alpha <= 0){
+                controlsText.flag = 2;
+            }
+        }
+        if (controlsText.flag == 2){
+            controlsText.alpha = 1;
+            controlsText.text = '\n\nChanging window size\n(or phone orientation)\nwill change the size\nof the arena';
+            controlsText.flag = 3;
+        }
+        if (controlsText.flag == 3){
+            controlsText.alpha -= 0.001;
+            if (controlsText.alpha <= 0){controlsText.flag = 4;}
+        }
+        
+        
+        // render everything
+        renderer.render(superstage);
+    }
+
+    </script>
+</body>
